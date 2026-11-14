@@ -1,0 +1,134 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# tstyle v2 - dynamic arrow-key menu
+
+T="$HOME/.tstyle"
+CONF="$T/config"
+[ -f "$CONF" ] || cp "$T/config.default" "$CONF" 2>/dev/null
+. "$CONF"
+
+G=$'\033[32m'; Y=$'\033[33m'; C=$'\033[36m'; R=$'\033[31m'; M=$'\033[35m'; B=$'\033[1m'; N=$'\033[0m'
+
+trap 'tput cnorm; stty echo; exit' INT TERM EXIT
+
+set_conf() {
+  local key="$1" val
+  val=$(printf '%s' "$2" | tr -d '"\\$`|&;<>')
+  if grep -q "^$key=" "$CONF"; then
+    sed -i "s|^$key=.*|$key=\"$val\"|" "$CONF"
+  else
+    echo "$key=\"$val\"" >> "$CONF"
+  fi
+  . "$CONF"
+}
+
+toggle() {
+  [ "${!1}" = "1" ] && set_conf "$1" 0 || set_conf "$1" 1
+}
+
+dot() { [ "$1" = "1" ] && printf '%s●%s ON ' "$G" "$N" || printf '%s●%s OFF' "$R" "$N"; }
+
+spinner() {
+  local f='|/-\' i
+  for i in 1 2 3 4 5 6 7 8; do
+    printf '\r%s %s Saving...%s' "$C" "${f:i%4:1}" "$N"
+    sleep 0.06
+  done
+  printf '\r%s ✔ Saved!    %s\n' "$G" "$N"
+  sleep 0.3
+}
+
+box_top()    { printf '%s╔══════════════════════════════════╗%s\n' "$M" "$N"; }
+box_bottom() { printf '%s╚══════════════════════════════════╝%s\n' "$M" "$N"; }
+
+# Arrow-key selector. Usage: pick "Title" item1 item2 ...
+# Result index goes to $PICK (255 when user presses q)
+pick() {
+  local title="$1"; shift
+  local items=("$@") sel=0 n=$# key i
+  tput civis
+  while true; do
+    clear
+    ( . "$T/header.sh" ) 2>/dev/null
+    box_top
+    printf '%s║%s %s%-32s%s %s║%s\n' "$M" "$N" "$B$C" "$title" "$N" "$M" "$N"
+    printf '%s╠══════════════════════════════════╣%s\n' "$M" "$N"
+    for ((i=0; i<n; i++)); do
+      if [ $i -eq $sel ]; then
+        printf '%s║%s %s▶ %-30s%s %s║%s\n' "$M" "$N" "$B$G" "${items[i]}" "$N" "$M" "$N"
+      else
+        printf '%s║%s   %-30s %s║%s\n' "$M" "$N" "${items[i]}" "$M" "$N"
+      fi
+    done
+    box_bottom
+    printf '%sUp/Down: move   Enter: select   q: back%s\n' "$Y" "$N"
+
+    IFS= read -rsn1 key
+    if [[ $key == $'\033' ]]; then
+      read -rsn2 -t 0.1 key
+      case "$key" in
+        '[A') sel=$(( (sel - 1 + n) % n )) ;;
+        '[B') sel=$(( (sel + 1) % n )) ;;
+      esac
+    elif [[ -z $key ]]; then
+      PICK=$sel; tput cnorm; return
+    elif [[ $key == q ]]; then
+      PICK=255; tput cnorm; return
+    fi
+  done
+}
+
+pause() { read -r -p "Press Enter to continue..." _; }
+
+header_menu() {
+  while true; do
+    pick "Header Settings" \
+      "Text: $TEXT" "Font: $FONT" "Color: $COLOR" "Header: $( [ "$HEADER" = 1 ] && echo ON || echo OFF )" "Back"
+    case $PICK in
+      0) read -r -p "New header text: " t; [ -n "$t" ] && { set_conf TEXT "$t"; spinner; } ;;
+      1) fonts=(standard slant big small banner block bubble digital mini script shadow smslant speed lean)
+         pick "Choose Font" "${fonts[@]}"
+         [ "$PICK" != 255 ] && { set_conf FONT "${fonts[PICK]}"; spinner; } ;;
+      2) colors=(rainbow red green yellow blue magenta cyan white)
+         pick "Choose Color" "${colors[@]}"
+         [ "$PICK" != 255 ] && { set_conf COLOR "${colors[PICK]}"; spinner; } ;;
+      3) toggle HEADER; spinner ;;
+      4|255) return ;;
+    esac
+  done
+}
+
+theme_menu() {
+  local themes=() f
+  for f in "$T"/themes/*.zsh; do themes+=("$(basename "$f" .zsh)"); done
+  pick "Prompt Theme (now: $THEME)" "${themes[@]}"
+  if [ "$PICK" != 255 ]; then
+    set_conf THEME "${themes[PICK]}"; spinner
+    echo "Restart Termux or run: exec zsh"; pause
+  fi
+}
+
+main_menu() {
+  while true; do
+    pick "TStyle - Main Menu" \
+      "Header settings" \
+      "Suggestion   $(dot "$SUGGEST")" \
+      "Highlighting $(dot "$HIGHLIGHT")" \
+      "Prompt theme [$THEME]" \
+      "Reset defaults" \
+      "Exit"
+    case $PICK in
+      0) header_menu ;;
+      1) toggle SUGGEST; spinner ;;
+      2) toggle HIGHLIGHT; spinner ;;
+      3) theme_menu ;;
+      4) cp "$T/config.default" "$CONF"; . "$CONF"; spinner ;;
+      5|255) clear; exit 0 ;;
+    esac
+  done
+}
+
+case "$1" in
+  preview) ( . "$T/header.sh" ) ;;
+  help|-h|--help) echo "Usage: tstyle [preview]" ;;
+  *) main_menu ;;
+esac
