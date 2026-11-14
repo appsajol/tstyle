@@ -1,0 +1,7 @@
+TEXT="Termux"
+FONT="standard"
+COLOR="rainbow"
+HEADER="1"
+SUGGEST="1"
+HIGHLIGHT="1"
+THEME="hacker"
