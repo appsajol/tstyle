@@ -15,7 +15,7 @@ A small customization tool for Termux. Change your startup header, get command s
 
 ```bash
 pkg install git -y
-git clone https://github.com/YOUR_USERNAME/tstyle.git
+git clone https://github.com/appsajol/tstyle.git
 cd tstyle
 bash install.sh
 ```
